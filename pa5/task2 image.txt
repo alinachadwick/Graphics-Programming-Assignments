@@ -1,0 +1,111 @@
+#define VISUALZE_RAY_DIR 0
+#define VISUALZE_SDF_SLICE 1
+
+int visualize_func =  VISUALZE_RAY_DIR;
+
+
+#define PROJECTION_ORTHOGRAPHIC 0
+#define PROJECTION_PERSPECTIVE  1
+
+int projection_func = PROJECTION_PERSPECTIVE;
+
+////////////////////////////////////////////////////
+// Write up your ray generation code here:
+////////////////////////////////////////////////////
+struct ray { 
+    vec3 origin;
+    vec3 direction;
+};
+
+
+// TASK 2.1
+void compute_camera_frame(vec3 dir, vec3 up, out vec3 u, out vec3 v, out vec3 w){
+     
+    w = -dir/length(dir);
+    u = normalize(cross(up, dir));
+    v  = cross(w,u);
+}
+
+
+// TASK 2.2
+ray generate_ray_orthographic(vec2 uv, vec3 e, vec3 u, vec3 v, vec3 w) {
+    
+    vec3 ray_direction = -w;
+    vec3 ray_origin = e + uv.x*u + uv.y*v;
+    return ray(ray_origin, normalize(ray_direction));
+}
+
+// TASK 2.3
+ray generate_ray_perspective(vec2 uv, vec3 eye, vec3 u, vec3 v, vec3 w, float focal_length) {
+    vec3 ray_origin = eye;
+    vec3 ray_direction = (-1.0)*focal_length*w + uv.x*u + uv.y*v;
+    return ray(ray_origin, normalize(ray_direction));
+}
+////////////////////////////////////////////////////
+
+
+void mainImage( out vec4 fragColor, in vec2 fragCoord )
+{
+    float aspect = iResolution.x / iResolution.y;
+    vec2 uv = fragCoord/iResolution.xy - 0.5;
+    
+    vec3 eye = vec3(0,0,-10);
+    vec3 target = vec3(0,0,0);
+    
+    if(abs(uv.x) < 0.005/aspect || abs(uv.y) < 0.005) {
+        fragColor = vec4(vec3(0.), 1.);
+        return;
+    }
+
+    if(uv.x < 0. && uv.y < 0.) {
+        eye = vec3(10.,0.,0.);
+        uv += 0.25;
+        uv *= 2.;
+    } else if(uv.x < 0. && uv.y > 0.) {
+        eye = vec3(-10.,0.,0.);
+        uv += vec2(0.25, -0.25);
+        uv *= 2.;
+    } else if(uv.x > 0. && uv.y > 0.) {
+        eye = vec3(0.,0.,10.);
+        uv -= 0.25;
+        uv *= 2.;
+    } else if(uv.x > 0. && uv.y < 0.) {
+        eye = vec3(0.,0.,-10.);
+        uv -= vec2(0.25, -0.25);
+        uv *= 2.;
+    }
+    
+    uv.x *= aspect;
+
+
+    
+    vec3 dir = target-eye;
+    vec3 up = vec3(0, 1, 0);
+    float focal_length = 4.;
+    
+    vec3 u,v,w;
+    
+    compute_camera_frame(dir, up, u, v, w);
+    
+    ray r;
+    switch(projection_func) {
+        case PROJECTION_ORTHOGRAPHIC:
+            r = generate_ray_orthographic(uv, eye, u, v, w);
+            break;
+     
+        case PROJECTION_PERSPECTIVE:
+            r = generate_ray_perspective(uv, eye, u, v, w, focal_length);
+            break;
+    }
+    
+    
+    switch(visualize_func) {
+        case VISUALZE_RAY_DIR:
+            fragColor = vec4(r.direction * 0.5 + 0.5, 1.0);
+            break;
+        case VISUALZE_SDF_SLICE:
+            float ray_dist = 9. + sin(iTime*0.25) * 1.0;
+            fragColor = vec4(shade(sdf(r.origin +  r.direction * ray_dist, iTime)), 1.0); 
+            break;
+    }
+}

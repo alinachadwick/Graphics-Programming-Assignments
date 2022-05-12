@@ -1,0 +1,212 @@
+// pre-defined constants
+#define EPSILON 1e-4
+#define PI 3.1415926535897932384626433832795
+
+
+// shade mode
+#define GRID 0
+#define COST 1
+#define NORMAL 2
+#define AMBIENT 3
+#define DIFFUSE_POINT 4
+#define ENVIRONMENT_MAP 5
+
+
+//
+// Render Settings
+//
+struct settings
+{
+    int shade_mode;
+};
+
+settings render_settings = settings(NORMAL);
+
+
+
+//float anim_speed = 0.35;
+float anim_speed = 0.35;
+int cost_norm = 200;
+
+vec3 two_tone_color_a = vec3(0.6 * 1.0, 0.6 * 1.0, 0.0 * 1.0);
+vec3 two_tone_color_b = vec3(0.2 * 1.0, 0.1 * 1.0, 0.9 * 1.0);
+//vec3 two_tone_color_a = vec3(0.9,0.7,0.6);
+//vec3 two_tone_color_b = vec3(0.0);
+vec3 two_tone_dir = vec3(1.0, 1.0, 0.0);
+
+////////////////////////////////////////////////////
+// SDF evaluation code here:
+////////////////////////////////////////////////////
+// returns the signed distance to a sphere from position p
+float sdSphere(vec3 p, float r)
+{
+ 	return length(p) - r;
+}
+
+// returns the signed distance to a box from position p
+float sdBox( vec3 p, vec3 half_bounds )
+{
+    // TODO
+    vec3 a = abs(p) - half_bounds;
+    return length(max(a,0.0)) + min(max(a.x,max(a.y,a.z)),0.0);
+}
+
+// returns the signed distance to a cylinder from position p
+float sdCylinder(vec3 p, vec3 a, vec3 b, float r)
+{
+    // TODO
+  vec3  dist1 = b - a;
+  vec3  dist2 = p - a;
+  float dot1 = dot(dist1,dist1);
+  float dot2 = dot(dist2,dist1);
+  float x = length(dist2*dot1-dist1*dot2) - r*dot1;
+  float y = abs(dot2-dot1*0.5)-dot1*0.5;
+  float x_sq = x*x;
+  float y_sq = y*y*dot1;
+  float d = (max(x,y)<0.0)?-min(x_sq,y_sq):(((x>0.0)?x_sq:0.0)+((y>0.0)?y_sq:0.0));
+  return sign(d)*sqrt(abs(d))/dot1;
+}
+
+
+// returns the signed distance to a cone from position p
+float sdCone(vec3 p, vec3 a, vec3 b, float ra, float rb)
+{
+    // TODO
+  float pos  = rb-ra;
+  float dist1 = dot(b-a,b-a);
+  float dist2 = dot(p-a,p-a);
+  float dist = dot(p-a,b-a)/dist1;
+  float sq = sqrt( dist2 - dist*dist*dist1 );
+  float ax = max(0.0,sq-((dist<0.5)?ra:rb));
+  float ay = abs(dist-0.5)-0.5;
+  float k = pos*pos + dist1;
+  float c = clamp( (pos*(sq-ra)+dist*dist1)/k, 0.0, 1.0 );
+  float bx = sq-ra - c*pos;
+  float by = dist - c;
+  float s = (bx<0.0 && ay<0.0) ? -1.0 : 1.0;
+  return s*sqrt( min(ax*ax + ay*ay*dist1,
+                     bx*bx + by*by*dist1) );
+}
+
+float sdLine(in vec2 p, in vec2 a, in vec2 b)
+{
+    // TODO
+    vec2 dist1 = p-a, dist2 = b-a;
+    float dot_prod = clamp( dot(dist1,dist2)/dot(dist2,dist2), 0.0, 1.0 );
+    return length( dist1 - dist2*dot_prod );
+}
+
+
+float opSmoothUnion(float d1, float d2, float k)
+{
+    // TODO
+    float h = clamp( 0.5 + 0.5*(d2-d1)/k, 0.0, 1.0 );
+    return mix( d2, d1, h ) - k*h*(1.0-h);
+}
+
+float opSmoothSubtraction(float d1, float d2, float k)
+{
+    // TODO
+   float h = clamp( 0.5 - 0.5*(d2+d1)/k, 0.0, 1.0 );
+    return mix( d2, -d1, h ) + k*h*(1.0-h);
+}
+
+float opSmoothIntersection( float d1, float d2, float k )
+{
+    // TODO
+    float h = clamp( 0.5 - 0.5*(d2-d1)/k, 0.0, 1.0 );
+    return mix( d2, d1, h ) + k*h*(1.0-h);
+}
+
+float opRound(float d, float iso)
+{
+    // TODO
+    return d - iso;
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+    
+
+//////////////////////////////////////////////////////////////////////////////////
+
+
+#define PROJECTION_ORTHOGRAPHIC 0
+#define PROJECTION_PERSPECTIVE  1
+
+int projection_func = PROJECTION_ORTHOGRAPHIC;
+
+////////////////////////////////////////////////////
+// Write up your ray generation code here:
+////////////////////////////////////////////////////
+struct ray { 
+    vec3 origin;
+    vec3 direction;
+};
+
+////////////////////////////////////////////////////
+// Write up your ray generation code here:
+////////////////////////////////////////////////////
+
+
+// TASK 2.1
+void compute_camera_frame(vec3 dir, vec3 up, out vec3 u, out vec3 v, out vec3 w){
+     
+    w = -dir/length(dir);
+    u = normalize(cross(up, dir));
+    v  = cross(w,u);
+}
+
+
+// TASK 2.2
+ray generate_ray_orthographic(vec2 uv, vec3 e, vec3 u, vec3 v, vec3 w) {
+    
+    vec3 ray_direction = -w;
+    vec3 ray_origin = e + uv.x*u + uv.y*v;
+    return ray(ray_origin, normalize(ray_direction));
+}
+
+// TASK 2.3
+ray generate_ray_perspective(vec2 uv, vec3 eye, vec3 u, vec3 v, vec3 w, float focal_length) {
+    vec3 ray_origin = eye;
+    vec3 ray_direction = (-1.0)*focal_length*w + uv.x*u + uv.y*v;
+    return ray(ray_origin, normalize(ray_direction));
+}
+////////////////////////////////////////////////////
+
+
+
+// returns the signed distance to an infinate plane with a specific y value
+float sdPlane(vec3 p, float z)
+{
+    return p.z - z;
+}
+
+float world_sdf(vec3 p, float time, settings setts)
+{
+    float dist = 100000.0;
+    
+    dist = sdPlane(p.xzy,  -0.3);
+    
+    dist = opSmoothUnion(dist, sdSphere(p - vec3(0.f, 0.25 * cos(anim_speed * time), 0.f), 0.4f), 0.1);
+    
+    dist = opSmoothUnion(dist, sdSphere(p - vec3(sin(time), 0.25 * cos(anim_speed * time*2.+0.2), cos(time)), 0.2f), 0.01);
+
+    dist = opSmoothSubtraction(sdBox(p - vec3(0.f, 0.25, 0.f), 0.1*vec3(2.+cos(time))), dist, 0.2);
+
+    dist = opSmoothUnion(dist, sdSphere(p - vec3(sin(-time), 0.25 * cos(anim_speed * time*25.+0.2), cos(-time)), 0.2f), 0.1);
+
+    return dist;
+}
+
+
+// The animation which you see is of a 2D slice of a 3D object. The objects exist in [-1, 1] space
+// and the slice is continuously moved along z=[-1,1] using a cosine. This method renders what the
+// current z value is as a progress bar at the bottom of the animation for reference.
+vec3 shade_progress_bar(vec2 p, vec2 res, float z)
+{
+    // have to take account of the aspect ratio
+    float xpos = p.x * res.y / res.x;
+    
+    if (xpos > z - 0.01 && xpos < z + 0.01) return vec3(1.0);
+    else return vec3(0.0);
+}

@@ -1,0 +1,166 @@
+settings left_settings = settings(SPHERE, GRID, RAY_MARCHING);
+settings right_settings = settings(SPHERE, GRID, SPHERE_TRACING);
+
+bool ray_march(ray r,
+               float step_size,
+               int max_iter,
+               settings setts,
+               out vec3 hit_loc,
+               out int iters)
+{
+    hit_loc = r.origin + r.direction * (-r.origin.y / r.direction.y);
+    iters = 1;
+    
+    // TODO: implement ray marching
+    
+    // it should work as follows:
+    //
+    // while (hit has not occured && iteration < max_iters)
+    //     march a distance of step_size forwards
+    //     evaluate the sdf
+    //     if a collision occurs (SDF < EPSILON)
+    //         return hit location and iteration count
+    // return false
+    int current_step = 1;
+    float t = step_size;
+    while (current_step < max_iter){
+      vec3 location = r.origin + t*r.direction;
+      float eval = world_sdf(location, iTime, setts);
+      if (eval < EPSILON){
+        hit_loc = location;
+        iters = current_step;
+        return true;
+      }
+      current_step +=1;
+      t+= step_size;
+        }
+    iters = max_iter;
+    return false;
+}
+
+bool sphere_tracing(ray r,
+               		int max_iter,
+               		settings setts,
+               		out vec3 hit_loc,
+               		out int iters)
+{
+    hit_loc = r.origin + r.direction * (-r.origin.y / r.direction.y);
+    iters = 1;
+    
+    // TODO: implement sphere tracing
+    
+    // it should work as follows:
+    //
+    // while (hit has not occured && iteration < max_iters)
+    //     set the step size to be the SDF
+    //     march step size forwards
+    //     if a collision occurs (SDF < EPSILON)
+    //         return hit location and iteration count
+    // return false
+    float step_size;
+    vec3 old_location = r.origin;
+    int current_step = 1;
+    while (current_step < max_iter){
+      step_size = world_sdf(old_location, iTime, setts);
+      vec3 location = old_location + step_size*r.direction;      
+      // march that step size forwards
+      if (step_size < EPSILON){
+        hit_loc = location;
+        iters = current_step;
+        return true;
+      }
+      old_location = location;
+      current_step +=1;
+           
+    }
+    iters = max_iter;
+    return false;
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+// we will be replacing all of the code below with our own method(s). All of    //
+// the changes you make will be disgarded. But feel free to change the main     //
+// method to help debug your code.                                              //
+//////////////////////////////////////////////////////////////////////////////////
+
+vec3 render(settings setts,
+            vec2 fragCoord)
+{
+    // get the location on the screen in [-1,1] space after
+    // accounting for the aspect ratio
+    vec2 p = (2.0*fragCoord-iResolution.xy)/iResolution.y;
+    
+    // render the progress bar if need be
+    if (p.y < -0.95)
+    {
+        float val = cos(iTime * anim_speed);
+        return shade_progress_bar(p, iResolution.xy, val);
+    }
+
+    
+    float aspect = iResolution.x / iResolution.y;
+    vec2 uv = fragCoord/iResolution.xy - 0.5;
+    uv.x *= aspect;
+   
+                              
+    vec3 eye = vec3(-3.0, 2.0 + 0.5, -3.0);
+    vec3 dir = vec3(0.3, 0.0, 0.3) - eye;
+    vec3 up = vec3(0, 1, 0);
+    
+    float focal_length = 4.;
+    
+    vec3 u,v,w;
+    compute_camera_frame(dir, up, u, v, w);
+    
+    ray r;
+    switch(projection_func) {
+        case PROJECTION_ORTHOGRAPHIC:
+            r = generate_ray_orthographic(uv, eye, u, v, w);
+            break;
+     
+        case PROJECTION_PERSPECTIVE:
+            r = generate_ray_perspective(uv, eye, u, v, w, focal_length);
+            break;
+    }
+    
+    int max_iter = 2000;
+    float step_size = 0.005;
+    
+    vec3 col = vec3(0.0);
+    
+    vec3 hit_loc;
+    int iters;
+    bool hit;
+    
+    // evaluate the specified rendering method and shade appropriately
+    if (setts.marching_type == RAY_MARCHING)
+    {
+        if (ray_march(r, step_size, max_iter, setts, hit_loc, iters))
+        {
+            col = shade(hit_loc, iters, setts);
+        }
+    }
+    else if (setts.marching_type == SPHERE_TRACING)
+    {
+        if (sphere_tracing(r, max_iter, setts, hit_loc, iters))
+        {
+            col = shade(hit_loc, iters, setts);
+        }
+    }
+    
+    return pow(col, vec3(1.0 / 2.2));
+}
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord)
+{
+    vec2 uvw = fragCoord / iResolution.xy;
+    
+    if (uvw.x < 0.5)
+    {
+        fragColor = vec4(render(left_settings, fragCoord), 1.0);
+    }
+    else
+    {
+        fragColor = vec4(render(right_settings, fragCoord), 1.0);
+    }
+}
